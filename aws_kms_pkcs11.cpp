@@ -618,13 +618,15 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
             debug("CKM_ECDSA unimplemented");
             break;
         case CKM_RSA_PKCS:
-            if (ulDataLen <= 32) {
+            if (ulDataLen == 32) {
                 digest.assign(pData, pData + ulDataLen);
+                debug("CKM_RSA_PKCS with SHA256");
             } else if (has_prefix(pData, ulDataLen, rsa_id_sha256, sizeof(rsa_id_sha256))) {
                 // Strip the digest algorithm identifier if it has been provided
-                digest.assign(pData + sizeof(rsa_id_sha256), pData + ulDataLen - sizeof(rsa_id_sha256));
+                digest.assign(pData + sizeof(rsa_id_sha256), pData + ulDataLen);
+                debug("CKM_RSA_PKCS with SHA256");
             } else {
-                debug("Invalid data length for SHA256 RSA signature: %d", ulDataLen);
+                debug("Invalid data length for RSA signature: %d", ulDataLen);
                 return CKR_ARGUMENTS_BAD;
             }
             break;
