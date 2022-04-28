@@ -8,17 +8,16 @@
 #include <algorithm>
 #include <vector>
 
-#include <aws/core/Aws.h>
-#include <aws/kms/KMSClient.h>
-#include <aws/kms/model/ListKeysRequest.h>
-#include <aws/kms/model/SignRequest.h>
-
 #include "pkcs11_compat.h"
 #include "attributes.h"
 #include "aws_kms_slot.h"
 #include "certificates.h"
 #include "debug.h"
 #include "unsupported.h"
+
+#include <azure/keyvault/keys/key_client.hpp>
+#include <azure/keyvault/keys/cryptography/cryptography_client.hpp>
+#include <azure/identity/environment_credential.hpp>
 
 using std::string;
 using std::vector;
@@ -40,7 +39,6 @@ typedef struct _session {
     CK_MECHANISM_TYPE sign_mechanism;
 } CkSession;
 
-static Aws::SDKOptions options;
 static vector<AwsKmsSlot>* slots = NULL;
 static vector<CkSession*>* active_sessions = NULL;
 
@@ -117,9 +115,6 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
         }
     }
 
-    Aws::SDKOptions options;
-    Aws::InitAPI(options);
-
     json_object* config = NULL;
     CK_RV res = load_config(&config);
     if (res != CKR_OK || config == NULL) {
@@ -136,17 +131,17 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
             if (json_object_is_type(slot_item, json_type_object)) {
                 struct json_object* val;
                 string label;
-                string kms_key_id;
-                string aws_region;
+                string key_name;
+                string vault_name;
                 X509* certificate = NULL;
                 if (json_object_object_get_ex(slot_item, "label", &val) && json_object_is_type(val, json_type_string)) {
                     label = string(json_object_get_string(val));
                 }
-                if (json_object_object_get_ex(slot_item, "kms_key_id", &val) && json_object_is_type(val, json_type_string)) {
-                    kms_key_id = string(json_object_get_string(val));
+                if (json_object_object_get_ex(slot_item, "key_name", &val) && json_object_is_type(val, json_type_string)) {
+                    key_name = string(json_object_get_string(val));
                 }
-                if (json_object_object_get_ex(slot_item, "aws_region", &val) && json_object_is_type(val, json_type_string)) {
-                    aws_region = string(json_object_get_string(val));
+                if (json_object_object_get_ex(slot_item, "vault_url", &val) && json_object_is_type(val, json_type_string)) {
+                    vault_name = string(json_object_get_string(val));
                 }
                 if (json_object_object_get_ex(slot_item, "certificate", &val) && json_object_is_type(val, json_type_string)) {
                     debug("Parsing certificate for slot: %s", label.c_str());
@@ -163,7 +158,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
                         debug("Failed to parse certificate_path for slot: %s", label.c_str());
                     }
                 }
-                slots->push_back(AwsKmsSlot(label, kms_key_id, aws_region, certificate));
+                slots->push_back(AwsKmsSlot(label, key_name, vault_name, certificate));
             }
         }
     }
@@ -171,26 +166,14 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
 
     if (slots->size() == 0) {
         debug("No KMS key ids configured; listing all keys.");
-        Aws::Client::ClientConfiguration awsConfig;
-        Aws::KMS::KMSClient kms(awsConfig);
-        Aws::KMS::Model::ListKeysRequest req;
-        req.SetLimit(1000);
-        bool has_more = true;
-        while (has_more) {
-            Aws::KMS::Model::ListKeysOutcome res = kms.ListKeys(req);
-            if (!res.IsSuccess()) {
-                debug("Got error from AWS list keys: %s", res.GetError().GetMessage().c_str());
-                C_Finalize(NULL_PTR);
-                return CKR_FUNCTION_FAILED;
-            }
-
-            for (size_t i = 0; i < res.GetResult().GetKeys().size(); i++) {
-                slots->push_back(AwsKmsSlot(string(), res.GetResult().GetKeys().at(i).GetKeyId(), string(), NULL));
-            }
-
-            has_more = res.GetResult().GetTruncated();
-            if (has_more) {
-                req.SetMarker(res.GetResult().GetNextMarker());
+        auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
+        std::string vault_name = std::getenv("AZURE_KEYVAULT_URL");
+        Azure::Security::KeyVault::Keys::KeyClient keyClient(vault_name, credential);
+        Azure::Security::KeyVault::Keys::KeyPropertiesPagedResponse pages = keyClient.GetPropertiesOfKeys();
+        for (; pages.HasPage(); pages.MoveToNextPage()) {
+            for (const auto &key: pages.Items) {
+                const string &key_name = key.Name;
+                slots->push_back(AwsKmsSlot({}, key_name, vault_name, NULL));
             }
         }
     }
@@ -203,7 +186,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
 
     debug("Configured slots:");
     for (size_t i = 0; i < slots->size(); i++) {
-        debug("  %s", slots->at(i).GetKmsKeyId().c_str());
+        debug("  %s", slots->at(i).GetKeyName().c_str());
     }
 
     return CKR_OK;
@@ -231,9 +214,6 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
         delete active_sessions;
         active_sessions = NULL;
     }
-
-    Aws::SDKOptions options;
-    Aws::ShutdownAPI(options);
 
     return CKR_OK;
 }
@@ -291,7 +271,7 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo) {
 
     string label = slot.GetLabel();
     if (label.length() == 0) {
-        label = slot.GetKmsKeyId();
+        label = slot.GetKeyName();
     }
     size_t label_len = label.length();
     if (label_len > 32) {
@@ -411,7 +391,7 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate, 
 static CK_BBOOL has_object(AwsKmsSlot& slot, CK_OBJECT_HANDLE idx) {
     switch (idx) {
         case PRIVATE_KEY_HANDLE:
-            return slot.GetPublicKeyData().GetLength() > 0;
+            return slot.GetPublicKeyData().size() > 0;
             break;
         case CERTIFICATE_HANDLE:
             return slot.GetCertificate() != NULL;
@@ -596,16 +576,16 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
     }
 
     AwsKmsSlot& slot = slots->at(session->slot_id);
-    Aws::Utils::ByteBuffer key_data = slot.GetPublicKeyData();
-    if (key_data.GetLength() == 0) {
+    std::vector<uint8_t> key_data = slot.GetPublicKeyData();
+    if (key_data.size() == 0) {
         return CKR_ARGUMENTS_BAD;
     }
 
     size_t sig_size;
     const EC_KEY* ec_key;
     const RSA* rsa;
-    const unsigned char* pubkey_bytes = key_data.GetUnderlyingData();
-    EVP_PKEY* pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.GetLength());
+    const unsigned char* pubkey_bytes = key_data.data();
+    EVP_PKEY* pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.size());
 
     int key_type = EVP_PKEY_base_id(pkey);
     switch (key_type) {
@@ -629,49 +609,41 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
         *pulSignatureLen = sig_size;
         return CKR_OK;
     }
-
-    Aws::KMS::Model::SignRequest req;
-    req.SetKeyId(slot.GetKmsKeyId());
+    auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
+    Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient cryptoClient(slot.GetKeyId(), credential);
+    std::vector<uint8_t> digest;
     switch (session->sign_mechanism) {
         case CKM_ECDSA:
-            req.SetMessage(Aws::Utils::CryptoBuffer(Aws::Utils::ByteBuffer(pData, ulDataLen)));
-            req.SetMessageType(Aws::KMS::Model::MessageType::DIGEST);
-            req.SetSigningAlgorithm(Aws::KMS::Model::SigningAlgorithmSpec::ECDSA_SHA_256);
+            // unimplemented
+            debug("CKM_ECDSA unimplemented");
             break;
         case CKM_RSA_PKCS:
             if (ulDataLen <= 32) {
-                req.SetMessage(Aws::Utils::CryptoBuffer(Aws::Utils::ByteBuffer(pData, ulDataLen)));
+                digest.assign(pData, pData + ulDataLen);
             } else if (has_prefix(pData, ulDataLen, rsa_id_sha256, sizeof(rsa_id_sha256))) {
                 // Strip the digest algorithm identifier if it has been provided
-                req.SetMessage(Aws::Utils::CryptoBuffer(Aws::Utils::ByteBuffer(pData + sizeof(rsa_id_sha256), ulDataLen - sizeof(rsa_id_sha256))));
+                digest.assign(pData + sizeof(rsa_id_sha256), pData + ulDataLen - sizeof(rsa_id_sha256));
             } else {
                 debug("Invalid data length for SHA256 RSA signature: %d", ulDataLen);
                 return CKR_ARGUMENTS_BAD;
             }
-            req.SetMessageType(Aws::KMS::Model::MessageType::DIGEST);
-            req.SetSigningAlgorithm(Aws::KMS::Model::SigningAlgorithmSpec::RSASSA_PKCS1_V1_5_SHA_256);
             break;
         default:
             return CKR_ARGUMENTS_BAD;
     }
-
-    Aws::Client::ClientConfiguration awsConfig;
-    if (slot.GetAwsRegion().length() > 0) {
-        awsConfig.region = slot.GetAwsRegion();
-    }
-    Aws::KMS::KMSClient kms(awsConfig);
-    Aws::KMS::Model::SignOutcome res = kms.Sign(req);
-    if (!res.IsSuccess()) {
-        debug("Error signing: %s", res.GetError().GetMessage().c_str());
+    Azure::Security::KeyVault::Keys::Cryptography::SignResult signature;
+    try {
+        signature  = cryptoClient.Sign(Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256, digest).Value;
+    } catch (const std::exception& e) {
+        debug("Error signing: %s", e.what());
         return CKR_FUNCTION_FAILED;
-    } else {
-        debug("Successfully called KMS to do a signing operation.");
     }
-    Aws::KMS::Model::SignResult response = res.GetResult();
+    
+    debug("Successfully called KMS to do a signing operation.");
 
     if (key_type == EVP_PKEY_EC) {
-        const unsigned char* sigbytes = response.GetSignature().GetUnderlyingData();
-        ECDSA_SIG* sig = d2i_ECDSA_SIG(NULL, &sigbytes, response.GetSignature().GetLength());
+        const unsigned char* sigbytes = signature.Signature.data();
+        ECDSA_SIG* sig = d2i_ECDSA_SIG(NULL, &sigbytes, signature.Signature.size());
         if (sig == NULL) {
             return CKR_FUNCTION_FAILED;
         }
@@ -686,11 +658,11 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
         *pulSignatureLen = pos;
         ECDSA_SIG_free(sig);
     } else {
-        if (response.GetSignature().GetLength() > sig_size) {
+        if (signature.Signature.size() > sig_size) {
             return CKR_FUNCTION_FAILED;
         }
-        memcpy(pSignature, response.GetSignature().GetUnderlyingData(), response.GetSignature().GetLength());
-        *pulSignatureLen = response.GetSignature().GetLength();
+        memcpy(pSignature, signature.Signature.data(), signature.Signature.size());
+        *pulSignatureLen = signature.Signature.size();
     }
 
     return CKR_OK;

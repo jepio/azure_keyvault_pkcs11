@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
     CK_FUNCTION_LIST* f;
     CK_RV res;
 
-    handle = dlopen("./aws_kms_pkcs11.so", RTLD_NOW);
+    handle = dlopen("./libazure_kms_pkcs11.so", RTLD_NOW);
     if (handle == NULL) {
         printf("Fail to load aws_kms_pkcs11.so: %s\n", dlerror());
         return 1;

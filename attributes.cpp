@@ -1,6 +1,7 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
+#include <string.h>
 
 #include "pkcs11_compat.h"
 #include "aws_kms_slot.h"
@@ -56,14 +57,14 @@ CK_RV getCommonAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_
             return copyBoolAttribute(pValue, pulValueLen, CK_TRUE);
 
         case CKA_ID: {
-            string label = slot.GetKmsKeyId();
+            string label = slot.GetKeyName();
             return copyAttribute(pValue, pulValueLen, label.c_str(), label.length());
         }
 
         case CKA_LABEL: {
             string label = slot.GetLabel();
             if (label.length() == 0) {
-                    label = slot.GetKmsKeyId();
+                    label = slot.GetKeyName();
             }
             return copyAttribute(pValue, pulValueLen, label.c_str(), label.length());
         }
@@ -77,26 +78,26 @@ CK_RV getCommonAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_
 
 CK_RV getKmsKeyAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
     /* Not *all* attributes need this but most of them do, so do it once here */
-    Aws::Utils::ByteBuffer key_data = slot.GetPublicKeyData();
+    std::vector<uint8_t> key_data = slot.GetPublicKeyData();
 
     switch (attr) {
         case CKA_CLASS: {
-            CK_OBJECT_CLASS obj_class = key_data.GetLength() > 0 ? CKO_PRIVATE_KEY : CKO_DATA;
+            CK_OBJECT_CLASS obj_class = key_data.size() > 0 ? CKO_PRIVATE_KEY : CKO_DATA;
             return copyAttribute(pValue, pulValueLen, &obj_class, sizeof(CK_OBJECT_CLASS));
         }
 
         case CKA_SIGN:
-            if (key_data.GetLength() == 0) {
+            if (key_data.size() == 0) {
                 return CKR_ATTRIBUTE_TYPE_INVALID;
             }
             return copyBoolAttribute(pValue, pulValueLen, CK_TRUE);
 
         case CKA_KEY_TYPE: {
-            if (key_data.GetLength() == 0) {
+            if (key_data.size() == 0) {
                 return CKR_ATTRIBUTE_TYPE_INVALID;
             }
-            const unsigned char* pubkey_bytes = key_data.GetUnderlyingData();
-            EVP_PKEY* pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.GetLength());
+            const unsigned char* pubkey_bytes = key_data.data();
+            EVP_PKEY* pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.size());
             if (pkey == NULL) {
                 return CKR_FUNCTION_FAILED;
             }
@@ -118,18 +119,18 @@ CK_RV getKmsKeyAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_
         }
 
         case CKA_ALWAYS_AUTHENTICATE:
-            if (key_data.GetLength() == 0) {
+            if (key_data.size() == 0) {
                 return CKR_ATTRIBUTE_TYPE_INVALID;
             }
             return copyBoolAttribute(pValue, pulValueLen, CK_FALSE);
 
         case CKA_MODULUS:
         case CKA_PUBLIC_EXPONENT: {
-            if (key_data.GetLength() == 0) {
+            if (key_data.size() == 0) {
                 return CKR_ATTRIBUTE_TYPE_INVALID;
             }
-            const unsigned char* pubkey_bytes = key_data.GetUnderlyingData();
-            EVP_PKEY* pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.GetLength());
+            const unsigned char* pubkey_bytes = key_data.data();
+            EVP_PKEY* pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.size());
             if (pkey == NULL) {
                 return CKR_FUNCTION_FAILED;
             }
@@ -150,11 +151,11 @@ CK_RV getKmsKeyAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_
         }
 
         case CKA_EC_POINT: {
-            if (key_data.GetLength() == 0) {
+            if (key_data.size() == 0) {
                 return CKR_ATTRIBUTE_TYPE_INVALID;
             }
-            const unsigned char* pubkey_bytes = key_data.GetUnderlyingData();
-            EVP_PKEY *pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.GetLength());
+            const unsigned char* pubkey_bytes = key_data.data();
+            EVP_PKEY *pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.size());
             if (pkey == NULL) {
                 return CKR_FUNCTION_FAILED;
             }
@@ -185,11 +186,11 @@ CK_RV getKmsKeyAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_
 
         case CKA_EC_PARAMS: {
             key_data = slot.GetPublicKeyData();
-            if (key_data.GetLength() == 0) {
+            if (key_data.size() == 0) {
                 return CKR_ATTRIBUTE_TYPE_INVALID;
             }
-            const unsigned char* pubkey_bytes = key_data.GetUnderlyingData();
-            EVP_PKEY *pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.GetLength());
+            const unsigned char* pubkey_bytes = key_data.data();
+            EVP_PKEY *pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.size());
             if (pkey == NULL) {
                 return CKR_FUNCTION_FAILED;
             }
