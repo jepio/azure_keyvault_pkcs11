@@ -611,8 +611,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
         *pulSignatureLen = sig_size;
         return CKR_OK;
     }
-    auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
-    Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient cryptoClient(slot.GetKeyId(), credential);
+    Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient cryptoClient = slot.GetCryptoClient();
     auto algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256;
     std::vector<uint8_t> digest;
     switch (session->sign_mechanism) {
