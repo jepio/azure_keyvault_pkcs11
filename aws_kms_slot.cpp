@@ -17,6 +17,8 @@ AwsKmsSlot::AwsKmsSlot(const string &label, const string &key_name, const string
     certificate(certificate),
     public_key_data_fetched(false)
 {
+    auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
+    this->key_client = std::make_unique<Azure::Security::KeyVault::Keys::KeyClient>(this->vault_name, credential);
 }
 
 const string &AwsKmsSlot::GetLabel() {
@@ -31,23 +33,18 @@ const string & AwsKmsSlot::GetKeyName() {
 const X509* AwsKmsSlot::GetCertificate() {
     return this->certificate;
 }
-const string & AwsKmsSlot::GetKeyId() {
-    if (this->public_key_data_fetched) {
-        return this->key_id;
-    }
-    return {};
+Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient AwsKmsSlot::GetCryptoClient() {
+    return this->key_client->GetCryptographyClient(this->key_name);
 }
 void AwsKmsSlot::FetchPublicKeyData() {
     if (this->public_key_data_fetched) {
         return;
     }
-    auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
-    Azure::Security::KeyVault::Keys::KeyClient keyClient(this->vault_name, credential);
 
     debug("Getting public key for key %s", this->key_name.c_str());
     Azure::Security::KeyVault::Keys::KeyVaultKey key;
     try {
-        key = keyClient.GetKey(this->key_name).Value;
+        key = this->key_client->GetKey(this->key_name).Value;
     } catch (const std::exception& e) {
         debug("Failed to get public key for key %s: %s", this->key_name.c_str(), e.what());
         return;
@@ -79,7 +76,6 @@ void AwsKmsSlot::FetchPublicKeyData() {
 
     this->public_key_data.swap(buffer);
     this->public_key_data_fetched = true;
-    this->key_id = key.Id();
 }
 std::vector<uint8_t> AwsKmsSlot::GetPublicKeyData() {
     this->FetchPublicKeyData();

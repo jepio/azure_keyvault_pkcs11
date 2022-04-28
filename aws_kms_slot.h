@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <openssl/x509.h>
 
+#include <azure/keyvault/keys/key_client.hpp>
+#include <azure/keyvault/keys/cryptography/cryptography_client.hpp>
+
 using std::string;
 
 class AwsKmsSlot {
@@ -15,8 +18,8 @@ private:
     const X509* certificate;
     bool public_key_data_fetched;
     std::vector<uint8_t> public_key_data;
-    string key_id;
     unsigned int key_size;
+    std::unique_ptr<Azure::Security::KeyVault::Keys::KeyClient> key_client;
     void FetchPublicKeyData();
 
 public:
@@ -27,6 +30,6 @@ public:
     const string& GetVaultName();
     const X509* GetCertificate();
     std::vector<uint8_t> GetPublicKeyData();
-    const string& GetKeyId();
     const unsigned int GetKeySize();
+    Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient GetCryptoClient();
 };
