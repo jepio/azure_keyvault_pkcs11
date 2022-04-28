@@ -1,7 +1,9 @@
-#include <aws/core/Aws.h>
-#include <aws/kms/KMSClient.h>
-#include <aws/kms/model/GetPublicKeyRequest.h>
+#include <azure/keyvault/keys/key_client.hpp>
+#include <azure/identity/environment_credential.hpp>
 #include <openssl/x509.h>
+#include <openssl/bn.h>
+#include <openssl/rsa.h>
+#include <openssl/evp.h>
 #include <string>
 
 #include "aws_kms_slot.h"
@@ -9,56 +11,81 @@
 
 using std::string;
 
-AwsKmsSlot::AwsKmsSlot(const string &label, const string &kms_key_id, const string aws_region,
-		       const X509* certificate) :
-	label(label), kms_key_id(kms_key_id), aws_region(aws_region),
-	certificate(certificate),
-	public_key_data_fetched(false)
+AwsKmsSlot::AwsKmsSlot(const string &label, const string &key_name, const string &vault_name,
+                       const X509* certificate) :
+    label(label), key_name(key_name), vault_name(vault_name),
+    certificate(certificate),
+    public_key_data_fetched(false)
 {
 }
 
 const string &AwsKmsSlot::GetLabel() {
     return this->label;
 }
-const string & AwsKmsSlot::GetAwsRegion() {
-    return this->aws_region;
+const string & AwsKmsSlot::GetVaultName() {
+    return this->vault_name;
 }
-const string & AwsKmsSlot::GetKmsKeyId() {
-    return this->kms_key_id;
+const string & AwsKmsSlot::GetKeyName() {
+    return this->key_name;
 }
 const X509* AwsKmsSlot::GetCertificate() {
     return this->certificate;
+}
+const string & AwsKmsSlot::GetKeyId() {
+    if (this->public_key_data_fetched) {
+        return this->key_id;
+    }
+    return {};
 }
 void AwsKmsSlot::FetchPublicKeyData() {
     if (this->public_key_data_fetched) {
         return;
     }
-    Aws::Client::ClientConfiguration awsConfig;
-    if (!this->aws_region.empty()) {
-        awsConfig.region = this->aws_region;
-    }
-    Aws::KMS::KMSClient kms(awsConfig);
-    Aws::KMS::Model::GetPublicKeyRequest req;
+    auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
+    Azure::Security::KeyVault::Keys::KeyClient keyClient(this->vault_name, credential);
 
-    debug("Getting public key for key %s", this->kms_key_id.c_str());
-    req.SetKeyId(this->kms_key_id);
-    Aws::KMS::Model::GetPublicKeyOutcome res = kms.GetPublicKey(req);
-    if (!res.IsSuccess()) {
-        debug("Got error from AWS fetching public key for key id %s: %s", this->kms_key_id.c_str(), res.GetError().GetMessage().c_str());
-        this->public_key_data = Aws::Utils::ByteBuffer();
-        this->key_spec = Aws::KMS::Model::KeySpec::NOT_SET;
-    } else {
-        debug("Successfully fetched public key data.");
-        this->public_key_data = res.GetResult().GetPublicKey();
-        this->key_spec = res.GetResult().GetKeySpec();
+    debug("Getting public key for key %s", this->key_name.c_str());
+    Azure::Security::KeyVault::Keys::KeyVaultKey key;
+    try {
+        key = keyClient.GetKey(this->key_name).Value;
+    } catch (const std::exception& e) {
+        debug("Failed to get public key for key %s: %s", this->key_name.c_str(), e.what());
+        return;
     }
+    debug("Successfully got public key for key %s", this->key_name.c_str());
+    std::vector<uint8_t> buffer;
+    if (key.Key.KeyType == Azure::Security::KeyVault::Keys::KeyVaultKeyType::Rsa ||
+        key.Key.KeyType == Azure::Security::KeyVault::Keys::KeyVaultKeyType::RsaHsm) {
+        // convert the key to a openssl key
+        BIGNUM *n = BN_new();
+        BN_bin2bn(key.Key.N.data(), key.Key.N.size(), n);
+        BIGNUM *e = BN_new();
+        BN_bin2bn(key.Key.E.data(), key.Key.E.size(), e);
+        RSA *rsa = RSA_new();
+        RSA_set0_key(rsa, n, e, NULL);
+        EVP_PKEY *pkey = EVP_PKEY_new();
+        EVP_PKEY_assign_RSA(pkey, rsa);
+        // convert the key to a openssl key
+        int len = i2d_PUBKEY(pkey, NULL);
+        buffer.resize(len);
+        unsigned char *ptr = buffer.data();
+        i2d_PUBKEY(pkey, &ptr);
+        EVP_PKEY_free(pkey);
+        this->key_size = key.Key.N.size() * 8;
+    } else {
+        debug("Key %s is an unknown key type", key.Key.KeyType.ToString().c_str());
+        return;
+    }
+
+    this->public_key_data.swap(buffer);
     this->public_key_data_fetched = true;
+    this->key_id = key.Id();
 }
-Aws::Utils::ByteBuffer AwsKmsSlot::GetPublicKeyData() {
+std::vector<uint8_t> AwsKmsSlot::GetPublicKeyData() {
     this->FetchPublicKeyData();
     return this->public_key_data;
 }
-Aws::KMS::Model::KeySpec AwsKmsSlot::GetKeySpec() {
+const unsigned int AwsKmsSlot::GetKeySize() {
     this->FetchPublicKeyData();
-    return this->key_spec;
+    return this->key_size;
 }

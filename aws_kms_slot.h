@@ -1,8 +1,8 @@
 #pragma once
 
 #include <string>
-#include <aws/core/utils/Array.h>
-#include <aws/kms/model/KeySpec.h>
+#include <vector>
+#include <cstdint>
 #include <openssl/x509.h>
 
 using std::string;
@@ -10,21 +10,23 @@ using std::string;
 class AwsKmsSlot {
 private:
     const string label;
-    const string kms_key_id;
-    const string aws_region;
+    const string key_name;
+    const string vault_name;
     const X509* certificate;
     bool public_key_data_fetched;
-
-    Aws::Utils::ByteBuffer public_key_data;
-    Aws::KMS::Model::KeySpec key_spec;
+    std::vector<uint8_t> public_key_data;
+    string key_id;
+    unsigned int key_size;
     void FetchPublicKeyData();
+
 public:
-    AwsKmsSlot(const string &label, const string &kms_key_id, const string aws_region,
-	       const X509* certificate);
+    AwsKmsSlot(const string &label, const string &key_name, const string &vault_name,
+               const X509* certificate);
     const string& GetLabel();
-    const string& GetKmsKeyId();
-    const string& GetAwsRegion();
+    const string& GetKeyName();
+    const string& GetVaultName();
     const X509* GetCertificate();
-    Aws::Utils::ByteBuffer GetPublicKeyData();
-    Aws::KMS::Model::KeySpec GetKeySpec();
+    std::vector<uint8_t> GetPublicKeyData();
+    const string& GetKeyId();
+    const unsigned int GetKeySize();
 };
