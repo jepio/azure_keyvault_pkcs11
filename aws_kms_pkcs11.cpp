@@ -553,6 +553,8 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pSignature, CK_ULONG_P
 }
 
 static const unsigned char rsa_id_sha256[] = { 0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20 };
+static const unsigned char rsa_id_sha512[] = { 0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40 };
+
 static CK_BBOOL has_prefix(CK_BYTE_PTR pData, CK_ULONG ulDataLen, const unsigned char* prefix, size_t prefixLen) {
     if (ulDataLen < sizeof(prefix)) {
         return CK_FALSE;
@@ -611,6 +613,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
     }
     auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
     Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient cryptoClient(slot.GetKeyId(), credential);
+    auto algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256;
     std::vector<uint8_t> digest;
     switch (session->sign_mechanism) {
         case CKM_ECDSA:
@@ -625,6 +628,11 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
                 // Strip the digest algorithm identifier if it has been provided
                 digest.assign(pData + sizeof(rsa_id_sha256), pData + ulDataLen);
                 debug("CKM_RSA_PKCS with SHA256");
+            } else if (has_prefix(pData, ulDataLen, rsa_id_sha512, sizeof(rsa_id_sha512))) {
+                // Strip the digest algorithm identifier if it has been provided
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS512;
+                digest.assign(pData + sizeof(rsa_id_sha512), pData + ulDataLen);
+                debug("CKM_RSA_PKCS with SHA512");
             } else {
                 debug("Invalid data length for RSA signature: %d", ulDataLen);
                 return CKR_ARGUMENTS_BAD;
@@ -635,7 +643,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
     }
     Azure::Security::KeyVault::Keys::Cryptography::SignResult signature;
     try {
-        signature  = cryptoClient.Sign(Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256, digest).Value;
+        signature = cryptoClient.Sign(algorithm, digest).Value;
     } catch (const std::exception& e) {
         debug("Error signing: %s", e.what());
         return CKR_FUNCTION_FAILED;
