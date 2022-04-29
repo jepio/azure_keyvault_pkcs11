@@ -10,6 +10,8 @@
 
 using std::string;
 
+std::shared_ptr<Azure::Core::Credentials::TokenCredential> get_credential();
+
 class AwsKmsSlot {
 private:
     string label;
