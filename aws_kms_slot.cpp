@@ -53,6 +53,7 @@ void AwsKmsSlot::FetchPublicKeyData() {
     std::vector<uint8_t> buffer;
     if (key.Key.KeyType == Azure::Security::KeyVault::Keys::KeyVaultKeyType::Rsa ||
         key.Key.KeyType == Azure::Security::KeyVault::Keys::KeyVaultKeyType::RsaHsm) {
+        debug("Key %s is an RSA key", this->key_name.c_str());
         // convert the key to a openssl key
         BIGNUM *n = BN_new();
         BN_bin2bn(key.Key.N.data(), key.Key.N.size(), n);
@@ -62,13 +63,41 @@ void AwsKmsSlot::FetchPublicKeyData() {
         RSA_set0_key(rsa, n, e, NULL);
         EVP_PKEY *pkey = EVP_PKEY_new();
         EVP_PKEY_assign_RSA(pkey, rsa);
-        // convert the key to a openssl key
         int len = i2d_PUBKEY(pkey, NULL);
         buffer.resize(len);
         unsigned char *ptr = buffer.data();
         i2d_PUBKEY(pkey, &ptr);
         EVP_PKEY_free(pkey);
         this->key_size = key.Key.N.size() * 8;
+    } else if (key.Key.KeyType == Azure::Security::KeyVault::Keys::KeyVaultKeyType::Ec ||
+               key.Key.KeyType == Azure::Security::KeyVault::Keys::KeyVaultKeyType::EcHsm) {
+        debug("Key %s is an EC key", this->key_name.c_str());
+        // convert the key to a openssl key
+        BIGNUM *x = BN_new();
+        BN_bin2bn(key.Key.X.data(), key.Key.X.size(), x);
+        BIGNUM *y = BN_new();
+        BN_bin2bn(key.Key.Y.data(), key.Key.Y.size(), y);
+        EC_KEY *ec = nullptr;
+        Azure::Security::KeyVault::Keys::KeyCurveName curve_name = key.Key.CurveName.ValueOr({});
+        if (curve_name == curve_name.P256) {
+            ec = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+        } else if (curve_name == curve_name.P384) {
+            ec = EC_KEY_new_by_curve_name(NID_secp384r1);
+        } else if (curve_name == curve_name.P521) {
+            ec = EC_KEY_new_by_curve_name(NID_secp521r1);
+        } else {
+            debug("Unsupported EC key type %s", key.Key.KeyType.ToString().c_str());
+            return;
+        }
+        EC_KEY_set_public_key_affine_coordinates(ec, x, y);
+        EVP_PKEY *pkey = EVP_PKEY_new();
+        EVP_PKEY_assign_EC_KEY(pkey, ec);
+        this->key_size = EVP_PKEY_bits(pkey);
+        int len = i2d_PUBKEY(pkey, NULL);
+        buffer.resize(len);
+        unsigned char *ptr = buffer.data();
+        i2d_PUBKEY(pkey, &ptr);
+        EVP_PKEY_free(pkey);
     } else {
         debug("Key %s is an unknown key type", key.Key.KeyType.ToString().c_str());
         return;
