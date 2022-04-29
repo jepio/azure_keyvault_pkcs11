@@ -32,6 +32,7 @@ target_link_libraries(azure_kms_pkcs11 PRIVATE
   Azure::azure-security-keyvault-keys
   Azure::azure-identity
   PkgConfig::JSON_C
+  -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/azure_kms_pkcs11.version
 )
 target_include_directories(azure_kms_pkcs11 PRIVATE ${P11_KIT_INCLUDE_DIRS}/p11-kit)
 
@@ -40,3 +41,7 @@ target_include_directories(azure_kms_pkcs11 PRIVATE ${P11_KIT_INCLUDE_DIRS}/p11-
 
 add_executable(aws_kms_pkcs11_test aws_kms_pkcs11_test.c)
 target_include_directories(aws_kms_pkcs11_test PRIVATE ${P11_KIT_INCLUDE_DIRS}/p11-kit)
+target_link_libraries(aws_kms_pkcs11_test PRIVATE -ldl)
+
+include(GNUInstallDirs)
+install(TARGETS azure_kms_pkcs11 LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkcs11/)
