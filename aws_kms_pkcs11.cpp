@@ -343,12 +343,12 @@ CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANISM
     switch (type) {
     case CKM_RSA_PKCS:
         pInfo->ulMinKeySize = 2048;
-        pInfo->ulMaxKeySize = 2048;
+        pInfo->ulMaxKeySize = 4096;
         pInfo->flags = CKF_SIGN;
         break;
     case CKM_ECDSA:
         pInfo->ulMinKeySize = 256;
-        pInfo->ulMaxKeySize = 256;
+        pInfo->ulMaxKeySize = 521;
         pInfo->flags = CKF_SIGN;
         break;
     default:
@@ -584,8 +584,10 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
     }
 
     size_t sig_size;
-    const EC_KEY* ec_key;
-    const RSA* rsa;
+    const EC_KEY* ec_key = nullptr;
+    int ec_key_type = -1;
+
+    const RSA* rsa = nullptr;
     const unsigned char* pubkey_bytes = key_data.data();
     EVP_PKEY* pkey = d2i_PUBKEY(NULL, &pubkey_bytes, key_data.size());
 
@@ -597,6 +599,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
             break;
         case EVP_PKEY_EC:
             ec_key = EVP_PKEY_get0_EC_KEY(pkey);
+            ec_key_type = EC_GROUP_get_curve_name(EC_KEY_get0_group(ec_key));
             sig_size = ECDSA_size(ec_key);
             break;
         default:
@@ -612,19 +615,31 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
         return CKR_OK;
     }
     Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient cryptoClient = slot.GetCryptoClient();
-    auto algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256;
+    Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm algorithm;
     std::vector<uint8_t> digest;
     switch (session->sign_mechanism) {
         case CKM_ECDSA:
-            // unimplemented
-            debug("CKM_ECDSA unimplemented");
+            if (ec_key_type == NID_X9_62_prime256v1) {
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::ES256;
+            } else if (ec_key_type == NID_secp384r1) {
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::ES384;
+            } else if (ec_key_type == NID_secp521r1) {
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::ES512;
+            } else {
+                debug("Unsupported EC key type: %d\n", ec_key_type);
+                return CKR_FUNCTION_FAILED;
+            }
+            debug("CKM_ECDSA: signing data with length %d ", ulDataLen);
+            digest.assign(pData, pData + ulDataLen);
             break;
         case CKM_RSA_PKCS:
             if (ulDataLen == 32) {
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256;
                 digest.assign(pData, pData + ulDataLen);
                 debug("CKM_RSA_PKCS with SHA256");
             } else if (has_prefix(pData, ulDataLen, rsa_id_sha256, sizeof(rsa_id_sha256))) {
                 // Strip the digest algorithm identifier if it has been provided
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256;
                 digest.assign(pData + sizeof(rsa_id_sha256), pData + ulDataLen);
                 debug("CKM_RSA_PKCS with SHA256");
             } else if (has_prefix(pData, ulDataLen, rsa_id_sha512, sizeof(rsa_id_sha512))) {
@@ -652,20 +667,11 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
 
     if (key_type == EVP_PKEY_EC) {
         const unsigned char* sigbytes = signature.Signature.data();
-        ECDSA_SIG* sig = d2i_ECDSA_SIG(NULL, &sigbytes, signature.Signature.size());
-        if (sig == NULL) {
+        if (signature.Signature.size() > sig_size) {
             return CKR_FUNCTION_FAILED;
         }
-        const BIGNUM* r = ECDSA_SIG_get0_r(sig);
-        const BIGNUM* s = ECDSA_SIG_get0_s(sig);
-
-        if ((size_t)BN_num_bytes(r) + (size_t)BN_num_bytes(s) > sig_size) {
-            return CKR_FUNCTION_FAILED;
-        }
-        int pos = BN_bn2bin(r, pSignature);
-        pos += BN_bn2bin(s, pSignature + pos);
-        *pulSignatureLen = pos;
-        ECDSA_SIG_free(sig);
+        memcpy(pSignature, signature.Signature.data(), signature.Signature.size());
+        *pulSignatureLen = signature.Signature.size();
     } else {
         if (signature.Signature.size() > sig_size) {
             return CKR_FUNCTION_FAILED;
