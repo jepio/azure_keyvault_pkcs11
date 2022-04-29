@@ -1,7 +1,8 @@
 #include <azure/keyvault/keys/key_client.hpp>
 #include <azure/identity/environment_credential.hpp>
-#include <azure/identity/managed_identity_credential.hpp>
 #include <azure/identity/chained_token_credential.hpp>
+#include <azure/identity/managed_identity_credential.hpp>
+#include <azure/identity/client_secret_credential.hpp>
 
 #include <openssl/x509.h>
 #include <openssl/bn.h>
@@ -9,17 +10,78 @@
 #include <openssl/evp.h>
 #include <string>
 
+#include <json.h>
+#include <pkcs11.h>
 #include "aws_kms_slot.h"
 #include "debug.h"
 
-using std::string;
+CK_RV load_config_path(const std::string& path, json_object **config);
 
+static int load_config(json_object** config)
+{
+    std::vector<string> config_paths;
+    config_paths.push_back("/etc/aws-kms-pkcs11/azureauth.json");
+
+    std::string xdg_config_home;
+    const char* user_home = getenv("HOME");
+    if (user_home != NULL) {
+        xdg_config_home = string(user_home) + "/.config";
+    }
+    if (xdg_config_home.length() > 0) {
+        config_paths.push_back(xdg_config_home + "/aws-kms-pkcs11/azureauth.json");
+    }
+    const char *azure_auth = getenv("AZURE_AUTH_LOCATION");
+    if (azure_auth != NULL) {
+        config_paths.push_back(azure_auth);
+    }
+
+    std::reverse(config_paths.begin(), config_paths.end());
+
+    for (size_t i = 0; i < config_paths.size(); i++) {
+        string path = config_paths.at(i);
+        if (load_config_path(path, config) == CKR_OK) {
+            return 0;
+        }
+    }
+
+    *config = json_object_new_object();
+    return 0;
+}
+
+class LazyFileCredential final : public Azure::Core::Credentials::TokenCredential {
+public:
+
+    Azure::Core::Credentials::AccessToken GetToken(Azure::Core::Credentials::TokenRequestContext const& tokenRequestContext, Azure::Core::Context const& context) const override
+    {
+        struct json_object* config = NULL;
+        CK_RV res = load_config(&config);
+        if (res != CKR_OK) {
+            throw Azure::Core::Credentials::AuthenticationException("Failed to load auth file");
+        }
+        struct json_object* val;
+        std::string appId;
+        std::string password;
+        std::string tenant;
+        if (json_object_object_get_ex(config, "appId", &val) && json_object_is_type(val, json_type_string)) {
+            appId = string(json_object_get_string(val));
+        }
+        if (json_object_object_get_ex(config, "password", &val) && json_object_is_type(val, json_type_string)) {
+            password = string(json_object_get_string(val));
+        }
+        if (json_object_object_get_ex(config, "tenant", &val) && json_object_is_type(val, json_type_string)) {
+            tenant = string(json_object_get_string(val));
+        }
+        json_object_put(config);
+        return Azure::Identity::ClientSecretCredential(tenant, appId, password).GetToken(tokenRequestContext, context);
+    }
+};
 
 std::shared_ptr<Azure::Core::Credentials::TokenCredential> get_credential()
 {
     static auto chainedTokenCredential = std::make_shared<Azure::Identity::ChainedTokenCredential>(
     Azure::Identity::ChainedTokenCredential::Sources{
         std::make_shared<Azure::Identity::EnvironmentCredential>(),
+        std::make_shared<LazyFileCredential>(),
         std::make_shared<Azure::Identity::ManagedIdentityCredential>()});
     return chainedTokenCredential;
 }
