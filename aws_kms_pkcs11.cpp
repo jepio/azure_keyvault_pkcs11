@@ -42,6 +42,48 @@ typedef struct _session {
 static vector<AwsKmsSlot>* slots = NULL;
 static vector<CkSession*>* active_sessions = NULL;
 
+CK_RV load_config_path(const std::string& path, json_object **config)
+{
+    debug("Attempting to load config from path: %s", path.c_str());
+
+    FILE* f = fopen(path.c_str(), "r");
+    if (f == NULL) {
+        debug("Skipping config because we couldn't open the file.");
+        return CKR_FUNCTION_FAILED;
+    }
+
+    fseek(f, 0L, SEEK_END);
+    size_t file_size = ftell(f);
+    fseek(f, 0L, SEEK_SET);
+
+    char* buffer = (char*)malloc(file_size);
+    if (buffer == NULL) {
+        fclose(f);
+        return CKR_HOST_MEMORY;
+    }
+
+    size_t actual = fread(buffer, file_size, 1, f);
+    fclose(f);
+    if (actual != 1) {
+        free(buffer);
+        return CKR_FUNCTION_FAILED;
+    }
+
+    struct json_tokener* tok = json_tokener_new();
+    struct json_object* conf = json_tokener_parse_ex(tok, buffer, file_size);
+    enum json_tokener_error errval = json_tokener_get_error(tok);
+    json_tokener_free(tok);
+    free(buffer);
+
+    if (conf != NULL) {
+        *config = conf;
+        return CKR_OK;
+    } else {
+        debug("Failed to parse config %s: %s", path.c_str(), json_tokener_error_desc(errval));
+    }
+    return CKR_FUNCTION_FAILED;
+}
+
 static CK_RV load_config(json_object** config) {
     vector<string> config_paths;
     config_paths.push_back("/etc/aws-kms-pkcs11/config.json");
@@ -61,44 +103,11 @@ static CK_RV load_config(json_object** config) {
     }
 
     std::reverse(config_paths.begin(), config_paths.end());
+
     for (size_t i = 0; i < config_paths.size(); i++) {
         string path = config_paths.at(i);
-        debug("Attempting to load config from path: %s", path.c_str());
-
-        FILE* f = fopen(path.c_str(), "r");
-        if (f == NULL) {
-            debug("Skipping config because we couldn't open the file.");
-            continue;
-        }
-
-        fseek(f, 0L, SEEK_END);
-        size_t file_size = ftell(f);
-        fseek(f, 0L, SEEK_SET);
-
-        char* buffer = (char*)malloc(file_size);
-        if (buffer == NULL) {
-            fclose(f);
-            return CKR_HOST_MEMORY;
-        }
-
-        size_t actual = fread(buffer, file_size, 1, f);
-        fclose(f);
-        if (actual != 1) {
-            free(buffer);
-            return CKR_FUNCTION_FAILED;
-        }
-
-        struct json_tokener* tok = json_tokener_new();
-        struct json_object* conf = json_tokener_parse_ex(tok, buffer, file_size);
-        enum json_tokener_error errval = json_tokener_get_error(tok);
-        json_tokener_free(tok);
-        free(buffer);
-
-        if (conf != NULL) {
-            *config = conf;
+        if (load_config_path(path, config) == CKR_OK) {
             return CKR_OK;
-        } else {
-            debug("Failed to parse config %s: %s", path.c_str(), json_tokener_error_desc(errval));
         }
     }
     *config = json_object_new_object();
@@ -168,7 +177,10 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
 
     if (slots->size() == 0) {
         debug("No KMS key ids configured; listing all keys.");
-        std::string vault_name = std::getenv("AZURE_KEYVAULT_URL");
+        std::string vault_name;
+        if (const char *tmp = std::getenv("AZURE_KEYVAULT_URL")) {
+            vault_name = tmp;
+        }
         Azure::Security::KeyVault::Keys::KeyClient keyClient(vault_name, get_credential());
         Azure::Security::KeyVault::Keys::KeyPropertiesPagedResponse pages = keyClient.GetPropertiesOfKeys();
         for (; pages.HasPage(); pages.MoveToNextPage()) {
