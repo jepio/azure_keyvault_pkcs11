@@ -1,5 +1,8 @@
 #include <azure/keyvault/keys/key_client.hpp>
 #include <azure/identity/environment_credential.hpp>
+#include <azure/identity/managed_identity_credential.hpp>
+#include <azure/identity/chained_token_credential.hpp>
+
 #include <openssl/x509.h>
 #include <openssl/bn.h>
 #include <openssl/rsa.h>
@@ -11,14 +14,22 @@
 
 using std::string;
 
+std::shared_ptr<Azure::Core::Credentials::TokenCredential> get_credential()
+{
+    static auto chainedTokenCredential = std::make_shared<Azure::Identity::ChainedTokenCredential>(
+    Azure::Identity::ChainedTokenCredential::Sources{
+        std::make_shared<Azure::Identity::EnvironmentCredential>(),
+        std::make_shared<Azure::Identity::ManagedIdentityCredential>()});
+    return chainedTokenCredential;
+}
+
 AwsKmsSlot::AwsKmsSlot(const string &label, const string &key_name, const string &vault_name,
                        const X509* certificate) :
     label(label), key_name(key_name), vault_name(vault_name),
     certificate(certificate),
     public_key_data_fetched(false)
 {
-    auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
-    this->key_client = std::make_unique<Azure::Security::KeyVault::Keys::KeyClient>(this->vault_name, credential);
+    this->key_client = std::make_unique<Azure::Security::KeyVault::Keys::KeyClient>(this->vault_name, get_credential());
 }
 
 const string &AwsKmsSlot::GetLabel() {

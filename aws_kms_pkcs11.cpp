@@ -9,7 +9,6 @@
 #include <vector>
 
 #include <azure/keyvault/keys/key_client.hpp>
-#include <azure/keyvault/certificates/certificate_client.hpp>
 #include <azure/keyvault/keys/cryptography/cryptography_client.hpp>
 
 #include "pkcs11_compat.h"
@@ -169,9 +168,8 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
 
     if (slots->size() == 0) {
         debug("No KMS key ids configured; listing all keys.");
-        auto credential = std::make_shared<Azure::Identity::EnvironmentCredential>();
         std::string vault_name = std::getenv("AZURE_KEYVAULT_URL");
-        Azure::Security::KeyVault::Keys::KeyClient keyClient(vault_name, credential);
+        Azure::Security::KeyVault::Keys::KeyClient keyClient(vault_name, get_credential());
         Azure::Security::KeyVault::Keys::KeyPropertiesPagedResponse pages = keyClient.GetPropertiesOfKeys();
         for (; pages.HasPage(); pages.MoveToNextPage()) {
             for (const auto &key: pages.Items) {
