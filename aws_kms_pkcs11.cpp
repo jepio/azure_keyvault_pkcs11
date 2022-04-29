@@ -681,7 +681,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
     return CKR_OK;
 }
 
-CK_RV C_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
+CK_RV __attribute__((visibility("default"))) C_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
     static CK_FUNCTION_LIST function_list = {
                version: {
                    major: 0,
