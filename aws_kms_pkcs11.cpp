@@ -189,6 +189,9 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
         std::string vault_name;
         if (const char *tmp = std::getenv("AZURE_KEYVAULT_URL")) {
             vault_name = tmp;
+        } else {
+            debug("AZURE_KEYVAULT_URL environment variable not set.");
+            return CKR_GENERAL_ERROR;
         }
         Azure::Security::KeyVault::Keys::KeyClient keyClient(vault_name, get_credential());
         Azure::Security::KeyVault::Certificates::CertificateClient certClient(vault_name, get_credential());
