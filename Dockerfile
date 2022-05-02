@@ -1,10 +1,12 @@
 ARG IMAGE=ubuntu:21.10
 FROM ${IMAGE} AS base
 
-RUN apt-get update && \
+RUN if [ "${IMAGE}" = "ubuntu:18.04" ]; then \
+  apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y apt-transport-https ca-certificates gnupg software-properties-common wget lsb-release && \
   ( wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | apt-key add - ) && \
-  apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
+  apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"; \
+  fi
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev git make gcc g++ cmake vim p11-kit libp11-kit-dev gnutls-bin ninja-build pkg-config
 RUN git clone https://github.com/Azure/azure-sdk-for-cpp /tmp/sdk && \
