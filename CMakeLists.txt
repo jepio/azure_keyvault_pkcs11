@@ -8,6 +8,7 @@ set(CMAKE_SHARED_MODULE_PREFIX "")
 #set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address")
 
 find_package(azure-security-keyvault-keys-cpp CONFIG REQUIRED)
+find_package(azure-security-keyvault-certificates-cpp CONFIG REQUIRED)
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 
@@ -16,7 +17,7 @@ pkg_check_modules(P11_KIT REQUIRED IMPORTED_TARGET p11-kit-1)
 pkg_check_modules(JSON_C REQUIRED IMPORTED_TARGET json-c)
 
 add_executable(keyvault keyvault.cpp)
-target_link_libraries(keyvault PRIVATE -static-libstdc++ Azure::azure-security-keyvault-keys Azure::azure-identity)
+target_link_libraries(keyvault PRIVATE -static-libstdc++ Azure::azure-security-keyvault-keys Azure::azure-security-keyvault-certificates Azure::azure-identity)
 
 add_library(azure_kms_pkcs11 MODULE
   aws_kms_pkcs11.cpp
@@ -30,9 +31,11 @@ target_include_directories(azure_kms_pkcs11 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(azure_kms_pkcs11 PRIVATE
   -static-libstdc++
   Azure::azure-security-keyvault-keys
+  Azure::azure-security-keyvault-certificates
   Azure::azure-identity
   PkgConfig::JSON_C
   -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/azure_kms_pkcs11.version
+  -Wl,-z,defs
 )
 target_include_directories(azure_kms_pkcs11 PRIVATE ${P11_KIT_INCLUDE_DIRS}/p11-kit)
 
