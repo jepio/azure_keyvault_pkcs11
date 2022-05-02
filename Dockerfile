@@ -1,5 +1,5 @@
 ARG IMAGE=ubuntu:21.10
-FROM ${IMAGE} AS base
+FROM ${IMAGE} AS development
 
 RUN if [ "${IMAGE}" = "ubuntu:18.04" ]; then \
   apt-get update && \
@@ -20,7 +20,7 @@ RUN git clone https://github.com/json-c/json-c -b json-c-0.16-20220414 --depth 1
   cmake --install /tmp/build && \
   rm -rf /tmp/json-c /tmp/build
 
-FROM base AS final
+FROM development AS final
 COPY . /work
 RUN cmake -S /work -B /build -GNinja -DCMAKE_BUILD_TYPE=Release && \
   cmake --build /build -- -j8 -v && \
