@@ -48,40 +48,41 @@ static int load_config(json_object** config)
     return 0;
 }
 
-class LazyFileCredential final : public Azure::Core::Credentials::TokenCredential {
-public:
-
-    Azure::Core::Credentials::AccessToken GetToken(Azure::Core::Credentials::TokenRequestContext const& tokenRequestContext, Azure::Core::Context const& context) const override
-    {
-        struct json_object* config = NULL;
-        CK_RV res = load_config(&config);
-        if (res != CKR_OK) {
-            throw Azure::Core::Credentials::AuthenticationException("Failed to load auth file");
-        }
-        struct json_object* val;
-        std::string appId;
-        std::string password;
-        std::string tenant;
-        if (json_object_object_get_ex(config, "appId", &val) && json_object_is_type(val, json_type_string)) {
-            appId = string(json_object_get_string(val));
-        }
-        if (json_object_object_get_ex(config, "password", &val) && json_object_is_type(val, json_type_string)) {
-            password = string(json_object_get_string(val));
-        }
-        if (json_object_object_get_ex(config, "tenant", &val) && json_object_is_type(val, json_type_string)) {
-            tenant = string(json_object_get_string(val));
-        }
-        json_object_put(config);
-        return Azure::Identity::ClientSecretCredential(tenant, appId, password).GetToken(tokenRequestContext, context);
+std::shared_ptr<Azure::Identity::ClientSecretCredential> makeClientSecretCredential()
+{
+    struct json_object* config = NULL;
+    CK_RV res = load_config(&config);
+    if (res != CKR_OK) {
+        throw Azure::Core::Credentials::AuthenticationException("Failed to load auth file");
     }
-};
+    struct json_object* val;
+    std::string appId;
+    std::string password;
+    std::string tenant;
+    if (json_object_object_get_ex(config, "appId", &val) && json_object_is_type(val, json_type_string)) {
+        appId = string(json_object_get_string(val));
+    }
+    if (json_object_object_get_ex(config, "password", &val) && json_object_is_type(val, json_type_string)) {
+        password = string(json_object_get_string(val));
+    }
+    if (json_object_object_get_ex(config, "tenant", &val) && json_object_is_type(val, json_type_string)) {
+        tenant = string(json_object_get_string(val));
+    }
+    json_object_put(config);
+    return std::make_shared<Azure::Identity::ClientSecretCredential>(tenant, appId, password);
+}
+std::shared_ptr<Azure::Identity::ClientSecretCredential> getClientSecretCredential()
+{
+    static auto cred = makeClientSecretCredential();
+    return cred;
+}
 
 std::shared_ptr<Azure::Core::Credentials::TokenCredential> get_credential()
 {
     static auto chainedTokenCredential = std::make_shared<Azure::Identity::ChainedTokenCredential>(
     Azure::Identity::ChainedTokenCredential::Sources{
         std::make_shared<Azure::Identity::EnvironmentCredential>(),
-        std::make_shared<LazyFileCredential>(),
+        getClientSecretCredential(),
         std::make_shared<Azure::Identity::ManagedIdentityCredential>()});
     return chainedTokenCredential;
 }
