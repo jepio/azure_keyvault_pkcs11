@@ -16,6 +16,7 @@
 #include "unsupported.h"
 
 #include <azure/keyvault/keys/key_client.hpp>
+#include <azure/keyvault/certificates/certificate_client.hpp>
 #include <azure/keyvault/keys/cryptography/cryptography_client.hpp>
 
 using std::string;
@@ -166,6 +167,17 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
                         debug("Failed to parse certificate_path for slot: %s", label.c_str());
                     }
                 }
+
+                if (certificate == NULL) {
+                    try {
+                        Azure::Security::KeyVault::Certificates::CertificateClient certClient(vault_name, get_credential());
+                        Azure::Security::KeyVault::Certificates::KeyVaultCertificate kvcert = certClient.GetCertificate(key_name).Value;
+                        const uint8_t *data = kvcert.Cer.data();
+                        certificate = d2i_X509(NULL, &data, kvcert.Cer.size());
+                    } catch (const std::exception &e) {
+                        debug("Failed to get certificate for key %s: %s", key_name.c_str(), e.what());
+                    }
+                }
                 slots->push_back(AwsKmsSlot(label, key_name, vault_name, certificate));
             }
         }
@@ -179,11 +191,20 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
             vault_name = tmp;
         }
         Azure::Security::KeyVault::Keys::KeyClient keyClient(vault_name, get_credential());
+        Azure::Security::KeyVault::Certificates::CertificateClient certClient(vault_name, get_credential());
         Azure::Security::KeyVault::Keys::KeyPropertiesPagedResponse pages = keyClient.GetPropertiesOfKeys();
         for (; pages.HasPage(); pages.MoveToNextPage()) {
             for (const auto &key: pages.Items) {
                 const string &key_name = key.Name;
-                slots->push_back(AwsKmsSlot({}, key_name, vault_name, NULL));
+                X509 *cert = nullptr;
+                try {
+                    Azure::Security::KeyVault::Certificates::KeyVaultCertificate kvcert = certClient.GetCertificate(key_name).Value;
+                    const uint8_t *data = kvcert.Cer.data();
+                    cert = d2i_X509(NULL, &data, kvcert.Cer.size());
+                } catch (const std::exception &e) {
+                    debug("Failed to get certificate for key %s: %s", key_name.c_str(), e.what());
+                }
+                slots->push_back(AwsKmsSlot({}, key_name, vault_name, cert));
             }
         }
     }
