@@ -3,8 +3,8 @@
 #include <openssl/x509.h>
 #include <string.h>
 
-#include "pkcs11_compat.h"
 #include "aws_kms_slot.h"
+#include "pkcs11_compat.h"
 
 static CK_RV copyAttribute(CK_VOID_PTR pDest, CK_ULONG_PTR pulDestLen, const void *pSrc, CK_ULONG ulSrcLen)
 {

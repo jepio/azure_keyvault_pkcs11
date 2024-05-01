@@ -8,16 +8,16 @@
 #include <algorithm>
 #include <vector>
 
+#include <azure/keyvault/keys/key_client.hpp>
+#include <azure/keyvault/certificates/certificate_client.hpp>
+#include <azure/keyvault/keys/cryptography/cryptography_client.hpp>
+
 #include "pkcs11_compat.h"
 #include "attributes.h"
 #include "aws_kms_slot.h"
 #include "certificates.h"
 #include "debug.h"
 #include "unsupported.h"
-
-#include <azure/keyvault/keys/key_client.hpp>
-#include <azure/keyvault/certificates/certificate_client.hpp>
-#include <azure/keyvault/keys/cryptography/cryptography_client.hpp>
 
 using std::string;
 using std::vector;
