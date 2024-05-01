@@ -1,4 +1,4 @@
-ARG IMAGE=ubuntu:21.10
+ARG IMAGE=ubuntu:22.04
 FROM ${IMAGE} AS development
 
 RUN if [ "${IMAGE}" = "ubuntu:18.04" ]; then \
@@ -8,7 +8,7 @@ RUN if [ "${IMAGE}" = "ubuntu:18.04" ]; then \
   apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"; \
   fi
 RUN apt-get update && \
-  DEBIAN_FRONTEND=noninteractive apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev git make gcc g++ cmake vim p11-kit libp11-kit-dev gnutls-bin ninja-build pkg-config
+  DEBIAN_FRONTEND=noninteractive apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev git make gcc g++ cmake vim p11-kit libp11-kit-dev gnutls-bin ninja-build pkg-config curl zip unzip tar
 RUN git clone https://github.com/Azure/azure-sdk-for-cpp /tmp/sdk && \
   cmake -S /tmp/sdk -B /tmp/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
   cmake --build /tmp/build -- -j8 -v && \
