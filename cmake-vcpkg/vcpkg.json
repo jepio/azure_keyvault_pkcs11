@@ -1,0 +1,7 @@
+{
+  "dependencies": [
+    "azure-identity-cpp",
+    "azure-security-keyvault-keys-cpp",
+    "azure-security-keyvault-certificates-cpp"
+  ]
+}
