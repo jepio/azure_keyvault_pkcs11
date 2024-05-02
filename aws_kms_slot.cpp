@@ -3,6 +3,7 @@
 #include <azure/identity/chained_token_credential.hpp>
 #include <azure/identity/managed_identity_credential.hpp>
 #include <azure/identity/client_secret_credential.hpp>
+#include <azure/identity/azure_cli_credential.hpp>
 
 #include <openssl/x509.h>
 #include <openssl/bn.h>
@@ -83,6 +84,7 @@ std::shared_ptr<Azure::Core::Credentials::TokenCredential> get_credential()
     Azure::Identity::ChainedTokenCredential::Sources{
         std::make_shared<Azure::Identity::EnvironmentCredential>(),
         getClientSecretCredential(),
+        std::make_shared<Azure::Identity::AzureCliCredential>(),
         std::make_shared<Azure::Identity::ManagedIdentityCredential>()});
     return chainedTokenCredential;
 }
