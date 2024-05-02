@@ -10,7 +10,8 @@ RUN if [ "${IMAGE}" = "ubuntu:18.04" ]; then \
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev git make gcc g++ cmake vim p11-kit libp11-kit-dev gnutls-bin ninja-build pkg-config curl zip unzip tar
 RUN git clone https://github.com/Azure/azure-sdk-for-cpp /tmp/sdk && \
-  cmake -S /tmp/sdk -B /tmp/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
+  git -C /tmp/sdk checkout -f 8db62bf8daac6ab55b5f865de1bd903d0090d681 && \
+  AZURE_SDK_DISABLE_AUTO_VCPKG=1 cmake -S /tmp/sdk -B /tmp/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DDISABLE_AZURE_CORE_OPENTELEMETRY=1 -DBUILD_WINDOWS_UWP=1 && \
   cmake --build /tmp/build -- -j8 -v && \
   cmake --install /tmp/build && \
   rm -rf /tmp/sdk /tmp/build
