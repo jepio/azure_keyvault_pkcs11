@@ -10,6 +10,7 @@ set(CMAKE_SHARED_MODULE_PREFIX "")
 find_package(azure-security-keyvault-keys-cpp CONFIG REQUIRED)
 find_package(azure-security-keyvault-certificates-cpp CONFIG REQUIRED)
 find_package(azure-identity-cpp CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(P11_KIT REQUIRED IMPORTED_TARGET p11-kit-1)
@@ -35,6 +36,8 @@ target_link_libraries(azure_kms_pkcs11 PRIVATE
   Azure::azure-security-keyvault-keys
   Azure::azure-security-keyvault-certificates
   Azure::azure-identity
+  OpenSSL::Crypto
+  OpenSSL::SSL
   PkgConfig::JSON_C
   -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/azure_kms_pkcs11.version
   -Wl,-z,defs
