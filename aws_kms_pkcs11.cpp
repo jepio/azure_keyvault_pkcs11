@@ -673,11 +673,17 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
             if (has_prefix(pData, ulDataLen, rsa_id_sha256, sizeof(rsa_id_sha256))) {
                 algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256;
                 digest.assign(pData + sizeof(rsa_id_sha256), pData + ulDataLen);
+            } else if (has_prefix(pData, ulDataLen, rsa_id_sha384, sizeof(rsa_id_sha384))) {
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS384;
+                digest.assign(pData + sizeof(rsa_id_sha384), pData + ulDataLen);
             } else if (has_prefix(pData, ulDataLen, rsa_id_sha512, sizeof(rsa_id_sha512))) {
                 algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS512;
                 digest.assign(pData + sizeof(rsa_id_sha512), pData + ulDataLen);
             } else if (ulDataLen <= 32) {
                 algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS256;
+                digest.assign(pData, pData + ulDataLen);
+            } else if (ulDataLen <= 48) {
+                algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS384;
                 digest.assign(pData, pData + ulDataLen);
             } else if (ulDataLen <= 64) {
                 algorithm = Azure::Security::KeyVault::Keys::Cryptography::SignatureAlgorithm::RS512;
