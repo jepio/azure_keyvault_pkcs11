@@ -19,7 +19,7 @@ void debug(const char *fmt, ...) {
     longer_fmt[strlen(fmt)+10] = '\0';
 
     va_start(args, fmt);
-    vprintf(longer_fmt, args);
+    vfprintf(stderr, longer_fmt, args);
     va_end(args);
 
     free(longer_fmt);
