@@ -1,4 +1,4 @@
-#include "certificates.h"
+#include "../src/certificates.h"
 
 int main(int argc, char** argv) {
     X509* cert = parseCertificateFromFile("test/cert.pem");
