@@ -13,7 +13,7 @@
 
 #include <json.h>
 #include <pkcs11.h>
-#include "aws_kms_slot.h"
+#include "azure-keyvault-slot.h"
 #include "debug.h"
 
 CK_RV load_config_path(const std::string& path, json_object **config);
@@ -21,7 +21,7 @@ CK_RV load_config_path(const std::string& path, json_object **config);
 static int load_config(json_object** config)
 {
     std::vector<string> config_paths;
-    config_paths.push_back("/etc/aws-kms-pkcs11/azureauth.json");
+    config_paths.push_back("/etc/azure-keyvault-pkcs11/azureauth.json");
 
     std::string xdg_config_home;
     const char* user_home = getenv("HOME");
@@ -29,7 +29,7 @@ static int load_config(json_object** config)
         xdg_config_home = string(user_home) + "/.config";
     }
     if (xdg_config_home.length() > 0) {
-        config_paths.push_back(xdg_config_home + "/aws-kms-pkcs11/azureauth.json");
+        config_paths.push_back(xdg_config_home + "/azure-keyvault-pkcs11/azureauth.json");
     }
     const char *azure_auth = getenv("AZURE_AUTH_LOCATION");
     if (azure_auth != NULL) {

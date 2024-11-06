@@ -12,10 +12,10 @@
 #include <azure/keyvault/certificates/certificate_client.hpp>
 #include <azure/keyvault/keys/cryptography/cryptography_client.hpp>
 
-#include "pkcs11_compat.h"
-#include "openssl_compat.h"
+#include "pkcs11-compat.h"
+#include "openssl-compat.h"
 #include "attributes.h"
-#include "aws_kms_slot.h"
+#include "azure-keyvault-slot.h"
 #include "certificates.h"
 #include "debug.h"
 #include "unsupported.h"
@@ -87,7 +87,7 @@ CK_RV load_config_path(const std::string& path, json_object **config)
 
 static CK_RV load_config(json_object** config) {
     vector<string> config_paths;
-    config_paths.push_back("/etc/aws-kms-pkcs11/config.json");
+    config_paths.push_back("/etc/azure-keyvault-pkcs11/config.json");
 
     const char* xdg_config_home_cstr = getenv("XDG_CONFIG_HOME");
     string xdg_config_home;
@@ -100,7 +100,7 @@ static CK_RV load_config(json_object** config) {
         }
     }
     if (xdg_config_home.length() > 0) {
-        config_paths.push_back(xdg_config_home + "/aws-kms-pkcs11/config.json");
+        config_paths.push_back(xdg_config_home + "/azure-keyvault-pkcs11/config.json");
     }
 
     std::reverse(config_paths.begin(), config_paths.end());

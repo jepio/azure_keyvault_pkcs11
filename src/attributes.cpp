@@ -3,9 +3,9 @@
 #include <openssl/x509.h>
 #include <string.h>
 
-#include "openssl_compat.h"
-#include "aws_kms_slot.h"
-#include "pkcs11_compat.h"
+#include "openssl-compat.h"
+#include "azure-keyvault-slot.h"
+#include "pkcs11-compat.h"
 
 static CK_RV copyAttribute(CK_VOID_PTR pDest, CK_ULONG_PTR pulDestLen, const void *pSrc, CK_ULONG ulSrcLen)
 {

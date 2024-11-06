@@ -3,7 +3,7 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
-#include "openssl_compat.h"
+#include "openssl-compat.h"
 
 X509* parseCertificateFromFile(const char* filename) {
     int res;

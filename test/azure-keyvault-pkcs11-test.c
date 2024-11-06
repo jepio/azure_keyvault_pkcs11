@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dlfcn.h>
-#include "../src/pkcs11_compat.h"
+#include "../src/pkcs11-compat.h"
 
 void dump_bytes(const char* name, const unsigned char* bytes, unsigned long len) {
     printf("%s=", name);
@@ -179,9 +179,9 @@ int main(int argc, char** argv) {
     CK_FUNCTION_LIST* f;
     CK_RV res;
 
-    handle = dlopen("./azure_kms_pkcs11.so", RTLD_NOW);
+    handle = dlopen("./azure-keyvault-pkcs11.so", RTLD_NOW);
     if (handle == NULL) {
-        printf("Fail to load aws_kms_pkcs11.so: %s\n", dlerror());
+        printf("Fail to load azure-keyvault-pkcs11.so: %s\n", dlerror());
         return 1;
     }
     getfunctionlist = (CK_RV (*)(CK_FUNCTION_LIST**)) dlsym(handle, "C_GetFunctionList");
