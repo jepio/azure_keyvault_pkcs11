@@ -16,12 +16,6 @@ find_package(json-c CONFIG)
 
 set(DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-add_executable(keyvault ${DIR}/keyvault.cpp)
-target_link_libraries(keyvault PRIVATE
-	Azure::azure-security-keyvault-keys
-	Azure::azure-security-keyvault-certificates
-	Azure::azure-identity
-)
 add_library(azure_kms_pkcs11 MODULE
 	${DIR}/aws_kms_pkcs11.cpp
 	${DIR}/unsupported.cpp

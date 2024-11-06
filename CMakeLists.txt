@@ -16,13 +16,6 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(P11_KIT REQUIRED IMPORTED_TARGET p11-kit-1)
 pkg_check_modules(JSON_C REQUIRED IMPORTED_TARGET json-c)
 
-add_executable(keyvault keyvault.cpp)
-target_link_libraries(keyvault PRIVATE
-  Azure::azure-security-keyvault-keys
-  Azure::azure-security-keyvault-certificates
-  Azure::azure-identity
-)
-
 add_library(azure_kms_pkcs11 MODULE
   aws_kms_pkcs11.cpp
   unsupported.cpp
