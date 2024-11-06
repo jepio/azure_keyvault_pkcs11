@@ -40,7 +40,7 @@ typedef struct _session {
     CK_MECHANISM_TYPE sign_mechanism;
 } CkSession;
 
-static vector<AwsKmsSlot>* slots = NULL;
+static vector<AzureKeyVaultSlot>* slots = NULL;
 static vector<CkSession*>* active_sessions = NULL;
 
 CK_RV load_config_path(const std::string& path, json_object **config)
@@ -119,7 +119,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     CK_RV result = CKR_OK;
 
     debug_enabled = CK_FALSE;
-    const char* debug_env_var = getenv("AWS_KMS_PKCS11_DEBUG");
+    const char* debug_env_var = getenv("AZURE_KEYVAULT_PKCS11_DEBUG");
     if (debug_env_var != NULL) {
         if (strlen(debug_env_var) > 0) {
             debug_enabled = CK_TRUE;
@@ -135,7 +135,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     }
 
     active_sessions = new vector<CkSession*>();
-    slots = new vector<AwsKmsSlot>();
+    slots = new vector<AzureKeyVaultSlot>();
     struct json_object* slots_array;
     if (json_object_object_get_ex(config, "slots", &slots_array) && json_object_is_type(slots_array, json_type_array)) {
 	    for (size_t i = 0; i < (size_t)json_object_array_length(slots_array); i++) {
@@ -181,14 +181,14 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
                         debug("Failed to get certificate for key %s: %s", key_name.c_str(), e.what());
                     }
                 }
-                slots->push_back(AwsKmsSlot(label, key_name, vault_name, certificate));
+                slots->push_back(AzureKeyVaultSlot(label, key_name, vault_name, certificate));
             }
         }
     }
     json_object_put(config);
 
     if (slots->size() == 0) {
-        debug("No KMS key ids configured; listing all keys.");
+        debug("No Key Vault keys configured; listing all keys.");
         std::string vault_name;
         if (const char *tmp = std::getenv("AZURE_KEYVAULT_URL")) {
             vault_name = tmp;
@@ -210,13 +210,13 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
                 } catch (const std::exception &e) {
                     debug("Failed to get certificate for key %s: %s", key_name.c_str(), e.what());
                 }
-                slots->push_back(AwsKmsSlot({}, key_name, vault_name, cert));
+                slots->push_back(AzureKeyVaultSlot({}, key_name, vault_name, cert));
             }
         }
     }
 
     if (slots->size() == 0) {
-        debug("No slots were configured and no KMS keys could be listed via an API call.");
+        debug("No slots were configured and no Key Vault keys could be listed via an API call.");
         result = CKR_FUNCTION_FAILED;
     } else {
         debug("Configured slots:");
@@ -236,7 +236,7 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
 
     if (slots != NULL) {
         for (size_t i = 0; i < slots->size(); i++) {
-            AwsKmsSlot& slot = slots->at(i);
+            AzureKeyVaultSlot& slot = slots->at(i);
             X509* cert = const_cast <X509 *>(slot.GetCertificate());
             if (cert != NULL) {
                 X509_free(cert);
@@ -303,7 +303,7 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo) {
     if (pInfo == NULL_PTR) {
         return CKR_ARGUMENTS_BAD;
     }
-    AwsKmsSlot& slot = slots->at(slotID);
+    AzureKeyVaultSlot& slot = slots->at(slotID);
 
     memset(pInfo, 0, sizeof(*pInfo));
     pInfo->flags = CKF_TOKEN_INITIALIZED;
@@ -321,10 +321,10 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo) {
     memcpy(pInfo->label, label.c_str(), label_len);
     static_assert(sizeof(pInfo->manufacturerID) == 32);
     memset(pInfo->manufacturerID, ' ', 32);
-    memcpy(pInfo->manufacturerID, "aws_kms", 7);
+    memcpy(pInfo->manufacturerID, "Microsoft", 9);
     static_assert(sizeof(pInfo->model) == 16);
     memset(pInfo->model, ' ', 16);
-    memcpy(pInfo->model, "0", 1);
+    memcpy(pInfo->model, "Azure Key Vault", 15);
     static_assert(sizeof(pInfo->serialNumber) == 16);
     memset(pInfo->serialNumber, ' ', 16);
     memcpy(pInfo->serialNumber, "0", 1);
@@ -387,7 +387,7 @@ CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANISM
     if (pInfo == NULL) {
         return CKR_ARGUMENTS_BAD;
     }
-    AwsKmsSlot& slot = slots->at(slotID);
+    AzureKeyVaultSlot& slot = slots->at(slotID);
     pInfo->ulMinKeySize = slot.GetKeySize();
     pInfo->ulMaxKeySize = slot.GetKeySize();
     pInfo->flags = CKF_SIGN;
@@ -425,7 +425,7 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate, 
     return CKR_OK;
 }
 
-static CK_BBOOL has_object(AwsKmsSlot& slot, CK_OBJECT_HANDLE idx) {
+static CK_BBOOL has_object(AzureKeyVaultSlot& slot, CK_OBJECT_HANDLE idx) {
     switch (idx) {
         case PRIVATE_KEY_HANDLE:
             return slot.GetPublicKeyData().size() > 0;
@@ -438,10 +438,10 @@ static CK_BBOOL has_object(AwsKmsSlot& slot, CK_OBJECT_HANDLE idx) {
     return CK_FALSE;
 }
 
-static CK_RV getAttributeForObject(AwsKmsSlot& slot, CK_OBJECT_HANDLE idx, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
+static CK_RV getAttributeForObject(AzureKeyVaultSlot& slot, CK_OBJECT_HANDLE idx, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
     switch (idx) {
         case PRIVATE_KEY_HANDLE:
-            return getKmsKeyAttributeValue(slot, attr, pValue, pulValueLen);
+            return getKeyVaultKeyAttributeValue(slot, attr, pValue, pulValueLen);
         case CERTIFICATE_HANDLE:
             return getCertificateAttributeValue(slot, attr, pValue, pulValueLen);
     }
@@ -449,7 +449,7 @@ static CK_RV getAttributeForObject(AwsKmsSlot& slot, CK_OBJECT_HANDLE idx, CK_AT
     return CKR_OBJECT_HANDLE_INVALID;
 }
 
-static CK_BBOOL matches_template(CkSession* session, AwsKmsSlot& slot, CK_OBJECT_HANDLE idx) {
+static CK_BBOOL matches_template(CkSession* session, AzureKeyVaultSlot& slot, CK_OBJECT_HANDLE idx) {
     unsigned char* buffer = NULL;
     CK_ULONG buffer_size = 0;
     CK_RV res;
@@ -499,7 +499,7 @@ CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject, C
     if (session == NULL) {
         return CKR_SESSION_HANDLE_INVALID;
     }
-    AwsKmsSlot& slot = slots->at(session->slot_id);
+    AzureKeyVaultSlot& slot = slots->at(session->slot_id);
 
     if (ulMaxObjectCount == 0 || session->find_objects_index > LAST_OBJECT_HANDLE) {
         *pulObjectCount = 0;
@@ -550,7 +550,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject, 
     if (hObject < FIRST_OBJECT_HANDLE || hObject > LAST_OBJECT_HANDLE) {
         return CKR_OBJECT_HANDLE_INVALID;
     }
-    AwsKmsSlot& slot = slots->at(session->slot_id);
+    AzureKeyVaultSlot& slot = slots->at(session->slot_id);
     if (!has_object(slot, hObject)) {
         return CKR_OBJECT_HANDLE_INVALID;
     }
@@ -614,7 +614,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
         return CKR_ARGUMENTS_BAD;
     }
 
-    AwsKmsSlot& slot = slots->at(session->slot_id);
+    AzureKeyVaultSlot& slot = slots->at(session->slot_id);
     std::vector<uint8_t> key_data = slot.GetPublicKeyData();
     if (key_data.size() == 0) {
         return CKR_ARGUMENTS_BAD;
@@ -704,7 +704,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData, CK_ULONG ulDataLen, 
         return CKR_FUNCTION_FAILED;
     }
 
-    debug("Successfully called KMS to do a signing operation.");
+    debug("Successfully called Key Vault to do a signing operation.");
 
     if (key_type == EVP_PKEY_EC) {
         const unsigned char* sigbytes = signature.Signature.data();
