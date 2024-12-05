@@ -23,10 +23,15 @@ static int load_config(json_object** config)
     std::vector<string> config_paths;
     config_paths.push_back("/etc/azure-keyvault-pkcs11/azureauth.json");
 
-    std::string xdg_config_home;
-    const char* user_home = getenv("HOME");
-    if (user_home != NULL) {
-        xdg_config_home = string(user_home) + "/.config";
+    const char* xdg_config_home_cstr = getenv("XDG_CONFIG_HOME");
+    string xdg_config_home;
+    if (xdg_config_home_cstr != NULL){
+        xdg_config_home = string(xdg_config_home_cstr);
+    } else {
+        const char* user_home = getenv("HOME");
+        if (user_home != NULL) {
+            xdg_config_home = string(user_home) + "/.config";
+        }
     }
     if (xdg_config_home.length() > 0) {
         config_paths.push_back(xdg_config_home + "/azure-keyvault-pkcs11/azureauth.json");
