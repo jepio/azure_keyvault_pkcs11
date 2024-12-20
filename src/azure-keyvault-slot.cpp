@@ -13,7 +13,7 @@
 
 #include <json.h>
 #include <pkcs11.h>
-#include "aws_kms_slot.h"
+#include "azure-keyvault-slot.h"
 #include "debug.h"
 
 CK_RV load_config_path(const std::string& path, json_object **config);
@@ -21,15 +21,20 @@ CK_RV load_config_path(const std::string& path, json_object **config);
 static int load_config(json_object** config)
 {
     std::vector<string> config_paths;
-    config_paths.push_back("/etc/aws-kms-pkcs11/azureauth.json");
+    config_paths.push_back("/etc/azure-keyvault-pkcs11/azureauth.json");
 
-    std::string xdg_config_home;
-    const char* user_home = getenv("HOME");
-    if (user_home != NULL) {
-        xdg_config_home = string(user_home) + "/.config";
+    const char* xdg_config_home_cstr = getenv("XDG_CONFIG_HOME");
+    string xdg_config_home;
+    if (xdg_config_home_cstr != NULL){
+        xdg_config_home = string(xdg_config_home_cstr);
+    } else {
+        const char* user_home = getenv("HOME");
+        if (user_home != NULL) {
+            xdg_config_home = string(user_home) + "/.config";
+        }
     }
     if (xdg_config_home.length() > 0) {
-        config_paths.push_back(xdg_config_home + "/aws-kms-pkcs11/azureauth.json");
+        config_paths.push_back(xdg_config_home + "/azure-keyvault-pkcs11/azureauth.json");
     }
     const char *azure_auth = getenv("AZURE_AUTH_LOCATION");
     if (azure_auth != NULL) {
@@ -89,8 +94,8 @@ std::shared_ptr<Azure::Core::Credentials::TokenCredential> get_credential()
     return chainedTokenCredential;
 }
 
-AwsKmsSlot::AwsKmsSlot(const string &label, const string &key_name, const string &vault_name,
-                       const X509* certificate) :
+AzureKeyVaultSlot::AzureKeyVaultSlot(const string &label, const string &key_name,
+                                     const string &vault_name, const X509* certificate) :
     label(label), key_name(key_name), vault_name(vault_name),
     certificate(certificate),
     public_key_data_fetched(false)
@@ -98,22 +103,22 @@ AwsKmsSlot::AwsKmsSlot(const string &label, const string &key_name, const string
     this->key_client = std::make_unique<Azure::Security::KeyVault::Keys::KeyClient>(this->vault_name, get_credential());
 }
 
-const string &AwsKmsSlot::GetLabel() {
+const string &AzureKeyVaultSlot::GetLabel() {
     return this->label;
 }
-const string & AwsKmsSlot::GetVaultName() {
+const string & AzureKeyVaultSlot::GetVaultName() {
     return this->vault_name;
 }
-const string & AwsKmsSlot::GetKeyName() {
+const string & AzureKeyVaultSlot::GetKeyName() {
     return this->key_name;
 }
-const X509* AwsKmsSlot::GetCertificate() {
+const X509* AzureKeyVaultSlot::GetCertificate() {
     return this->certificate;
 }
-Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient AwsKmsSlot::GetCryptoClient() {
+Azure::Security::KeyVault::Keys::Cryptography::CryptographyClient AzureKeyVaultSlot::GetCryptoClient() {
     return this->key_client->GetCryptographyClient(this->key_name);
 }
-void AwsKmsSlot::FetchPublicKeyData() {
+void AzureKeyVaultSlot::FetchPublicKeyData() {
     if (this->public_key_data_fetched) {
         return;
     }
@@ -183,11 +188,11 @@ void AwsKmsSlot::FetchPublicKeyData() {
     this->public_key_data.swap(buffer);
     this->public_key_data_fetched = true;
 }
-std::vector<uint8_t> AwsKmsSlot::GetPublicKeyData() {
+std::vector<uint8_t> AzureKeyVaultSlot::GetPublicKeyData() {
     this->FetchPublicKeyData();
     return this->public_key_data;
 }
-const unsigned int AwsKmsSlot::GetKeySize() {
+const unsigned int AzureKeyVaultSlot::GetKeySize() {
     this->FetchPublicKeyData();
     return this->key_size;
 }

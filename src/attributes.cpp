@@ -3,9 +3,9 @@
 #include <openssl/x509.h>
 #include <string.h>
 
-#include "openssl_compat.h"
-#include "aws_kms_slot.h"
-#include "pkcs11_compat.h"
+#include "openssl-compat.h"
+#include "azure-keyvault-slot.h"
+#include "pkcs11-compat.h"
 
 static CK_RV copyAttribute(CK_VOID_PTR pDest, CK_ULONG_PTR pulDestLen, const void *pSrc, CK_ULONG ulSrcLen)
 {
@@ -52,7 +52,7 @@ static CK_RV copyBNAttribute(CK_VOID_PTR pDest, CK_ULONG_PTR pulDestLen, const B
     return CKR_OK;
 }
 
-CK_RV getCommonAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
+CK_RV getCommonAttributeValue(AzureKeyVaultSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
     switch (attr) {
         case CKA_TOKEN:
             return copyBoolAttribute(pValue, pulValueLen, CK_TRUE);
@@ -77,7 +77,7 @@ CK_RV getCommonAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_
     return CKR_OK;
 }
 
-CK_RV getKmsKeyAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
+CK_RV getKeyVaultKeyAttributeValue(AzureKeyVaultSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
     /* Not *all* attributes need this but most of them do, so do it once here */
     std::vector<uint8_t> key_data = slot.GetPublicKeyData();
 
@@ -263,7 +263,7 @@ CK_RV do_get_raw_integer(const ASN1_INTEGER* serial, CK_VOID_PTR pValue, CK_ULON
     return ret;
 }
 
-CK_RV getCertificateAttributeValue(AwsKmsSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
+CK_RV getCertificateAttributeValue(AzureKeyVaultSlot& slot, CK_ATTRIBUTE_TYPE attr, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
     const X509* cert = slot.GetCertificate();
     if (cert == NULL) {
         return CKR_OBJECT_HANDLE_INVALID;

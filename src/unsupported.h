@@ -1,4 +1,4 @@
-#include "pkcs11_compat.h"
+#include "pkcs11-compat.h"
 
 CK_RV C_CancelFunction(CK_SESSION_HANDLE);
 CK_RV C_CopyObject(CK_SESSION_HANDLE, CK_OBJECT_HANDLE, CK_ATTRIBUTE_PTR, CK_ULONG, CK_OBJECT_HANDLE_PTR);

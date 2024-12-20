@@ -1,4 +1,4 @@
-#include "pkcs11_compat.h"
+#include "pkcs11-compat.h"
 
 CK_RV C_CancelFunction(CK_SESSION_HANDLE) {
     return CKR_FUNCTION_NOT_SUPPORTED;

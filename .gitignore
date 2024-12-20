@@ -1,4 +1,4 @@
 .idea/
 *.iml
 *.so
-aws_kms_pkcs11_test
+azure-keyvault-pkcs11-test

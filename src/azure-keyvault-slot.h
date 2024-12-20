@@ -12,7 +12,7 @@ using std::string;
 
 std::shared_ptr<Azure::Core::Credentials::TokenCredential> get_credential();
 
-class AwsKmsSlot {
+class AzureKeyVaultSlot {
 private:
     const string label;
     const string key_name;
@@ -25,8 +25,8 @@ private:
     void FetchPublicKeyData();
 
 public:
-    AwsKmsSlot(const string &label, const string &key_name, const string &vault_name,
-               const X509* certificate);
+    AzureKeyVaultSlot(const string &label, const string &key_name,
+                      const string &vault_name, const X509* certificate);
     const string& GetLabel();
     const string& GetKeyName();
     const string& GetVaultName();
